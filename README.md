@@ -45,34 +45,44 @@ This will:
 ## Quick start
 
 **Start a new time tracking session**
-timetrack start
+
+`timetrack start`
 
 **Start a session with a specific category**
-timetrack start --category "Development"
+
+`timetrack start --category "Development"`
 
 **Start a session with category and subcategory**
-timetrack start --category "Development" --subcategory "Frontend"
+
+`timetrack start --category "Development" --subcategory "Frontend"`
 
 **Add past session**
-timetrack add
+
+`timetrack add`
 
 **Stop the current session**
-timetrack stop
+
+`timetrack stop`
 
 **View today's summary**
-timetrack report today
+
+`timetrack report today`
 
 **View weekly summary**
-timetrack report week
+
+`timetrack report week`
 
 **List all active timers**
-timetrack list
+
+`timetrack list`
 
 **Edit a session**
-timetrack edit <session-id>
+
+`timetrack edit <session-id>`
 
 **Delete a session**
-timetrack delete <session-id>
+
+`timetrack delete <session-id>`
 
 
 ## Basic Commands
