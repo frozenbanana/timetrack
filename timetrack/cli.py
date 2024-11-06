@@ -6,22 +6,23 @@ from pathlib import Path
 from enum import Enum
 from typing import Dict, List, Optional
 
-class Category(Enum):
-    PRODUCT_DEV = "Product dev"
-    SWARM_SUPPORT = "Swarm Support"
-    INTERNAL_TECH = "Internal Tech"
-    SALES = "Sales"
-    MARKETING = "Marketing"
-    ADMIN_COORD = "Admin & Coord"
-    OTHER = "Other"
 
 class TimeTracker:
     def __init__(self):
         self.data_file = Path.home() / '.timetrack_data.json'
         self.categories_file = Path.home() / '.timetrack_categories.json'
         self.categories = self._load_categories()
-        self.active_timers = self._load_active_timers()
-        self.sessions = self._load_sessions()
+        self._load_data()
+
+    def _load_data(self):
+        if self.data_file.exists():
+            with open(self.data_file) as f:
+                data = json.load(f)
+                self.active_timers = data.get('active_timers', {})
+                self.sessions = data.get('sessions', [])
+        else:
+            self.active_timers = {}
+            self.sessions = []
 
     def _load_categories(self):
         """Load categories from JSON file or return defaults."""
@@ -46,20 +47,6 @@ class TimeTracker:
             json.dump(default_categories, f, indent=2)
         
         return default_categories
-
-    def _load_active_timers(self):
-        if self.data_file.exists():
-            with open(self.data_file) as f:
-                data = json.load(f)
-                return data.get('active_timers', {})
-        return {}
-
-    def _load_sessions(self):
-        if self.data_file.exists():
-            with open(self.data_file) as f:
-                data = json.load(f)
-                return data.get('sessions', [])
-        return []
 
     def _save_data(self):
         data = {
@@ -96,15 +83,61 @@ class TimeTracker:
             else:
                 raise click.ClickException("Please stop the current timer before starting a new one.")
 
+
         timer_key = f"{main_category} - {subcategory}"
         self.active_timers[timer_key] = {
-            'start_time': datetime.datetime.now(),
+            'start_time': datetime.datetime.now().isoformat(),
             'main_category': main_category,
             'subcategory': subcategory,
-            'description': description
+            'description': description,
+            'accumulated_seconds': 0.0,
+            'paused': False,
+            'pause_time': None
         }
         self._save_data()
         click.echo(f"Started timer for '{timer_key}' - {description}")
+
+    def pause_timer(self):
+        if not self.active_timers:
+            raise click.ClickException("No active timers to pause.")
+        if len(self.active_timers) > 1:
+            raise click.ClickException("Multiple timers active. Please specify which one to pause.")
+        timer_key = list(self.active_timers.keys())[0]
+        timer_data = self.active_timers[timer_key]
+
+        if timer_data['paused']:
+            raise click.ClickException(f"Timer '{timer_key}' is already paused.")
+
+        start_time = datetime.datetime.fromisoformat(timer_data['start_time'])
+        now = datetime.datetime.now()
+        elapsed = (now - start_time).total_seconds()
+        timer_data['accumulated_seconds'] += elapsed
+        timer_data['paused'] = True
+        timer_data['pause_time'] = now.isoformat()
+        timer_data['start_time'] = None
+
+        self._save_data()
+        click.echo(f"Paused timer '{timer_key}'")
+
+    #def remove_timer(self): 
+    
+    def resume_timer(self):
+        if not self.active_timers:
+            raise click.ClickException("No paused timers to resume.")
+        if len(self.active_timers) > 1:
+            raise click.ClickException("Multiple timers active. Please specify which one to resume.")
+        timer_key = list(self.active_timers.keys())[0]
+        timer_data = self.active_timers[timer_key]
+
+        if not timer_data['paused']:
+            raise click.ClickException(f"Timer '{timer_key}' is not paused.")
+
+        timer_data['paused'] = False
+        timer_data['start_time'] = datetime.datetime.now().isoformat()
+        timer_data['pause_time'] = None
+
+        self._save_data()
+        click.echo(f"Resumed timer '{timer_key}'")
         
     def prompt_category_selection(self) -> tuple[str, str, str]:
         """Interactive wizard for category selection."""
@@ -181,19 +214,29 @@ class TimeTracker:
             raise click.ClickException(f"No active timer found for '{timer_key}'")
 
         timer_data = self.active_timers[timer_key]
-        end_time = datetime.datetime.now()
-        start_time = datetime.datetime.fromisoformat(str(timer_data['start_time']))
-        duration = end_time - start_time
+        total_seconds = timer_data.get('accumulated_seconds', 0.0)
+
+        if not timer_data['paused']:
+            start_time = datetime.datetime.fromisoformat(timer_data['start_time'])
+            now = datetime.datetime.now()
+            elapsed = (now - start_time).total_seconds()
+            total_seconds += elapsed
+            end_time = now
+        else:
+            end_time = datetime.datetime.fromisoformat(timer_data['pause_time'])
+            start_time = datetime.datetime.fromisoformat(timer_data.get('initial_start_time') or timer_data['pause_time'])
+        
+        duration = datetime.timedelta(seconds=total_seconds)
 
         session = {
-            'id': len(self.sessions) + 1,  # Add unique id
+            'id': len(self.sessions) + 1,
             'main_category': timer_data['main_category'],
             'subcategory': timer_data['subcategory'],
             'description': timer_data['description'],
-            'start_time': start_time,
-            'end_time': end_time,
+            'start_time': start_time.isoformat(),
+            'end_time': end_time.isoformat(),
             'duration': str(duration),
-            'duration_hours': duration.total_seconds() / 3600,
+            'duration_hours': total_seconds / 3600,
             'week': start_time.isocalendar()[1]
         }
 
@@ -201,11 +244,11 @@ class TimeTracker:
         del self.active_timers[timer_key]
         self._save_data()
 
-        hours, remainder = divmod(duration.seconds, 3600)
+        hours, remainder = divmod(int(duration.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
         click.echo(f"Ended timer for '{timer_key}'")
         click.echo(f"Duration: {hours:02d}:{minutes:02d}:{seconds:02d}")
-
+        
     def prompt_session_selection(self) -> int:
         """Interactive wizard for selecting a session to edit."""
         if not self.sessions:
@@ -357,20 +400,35 @@ class TimeTracker:
 
     def _generate_detailed_report(self, sessions):
         click.echo("\nDetailed Time Tracking Report")
-        click.echo("-" * 100)
-        click.echo(f"{'Category':<15} {'Subcategory':<20} {'Description':<25} {'Duration':<10} {'Date':<15}")
-        click.echo("-" * 100)
+        click.echo("-" * 115)
+        click.echo(f"{'Category':<15} {'Subcategory':<22} {'Description':<30} {'Duration':<10} {'Date':<14} {'Week':<5}")
+        click.echo("-" * 115)
+
+        total_hours = 0.0
 
         for session in sessions:
             start = datetime.datetime.fromisoformat(str(session['start_time']))
             duration_hours = session['duration_hours']
+            subcategory = session.get('subcategory') or ''  # Use empty string if subcategory is None or missing
+            description = session['description']
+            week = datetime.datetime.fromisoformat(session['start_time']).isocalendar()[1]
+
+            total_hours += duration_hours
+
+            if len(description) > 28:
+                description = description[:25] + '...'
+
             click.echo(
                 f"{session['main_category']:<15} "
-                f"{session['subcategory']:<20} "
-                f"{(session['description'][:22] + '...') if len(session['description']) > 25 else session['description']:<25} "
+                f"{subcategory:<22} "
+                f"{description:<30} "
                 f"{f'{duration_hours:.2f}h':<10} "
                 f"{start.strftime('%Y-%m-%d'):<15}"
+                f"{str(week):<5}"
             )
+
+        click.echo("-" * 115)
+        click.echo(f"Total Hours: {total_hours:.3f}h")
 
     def _generate_summary_report(self, sessions):
         click.echo("\nTime Tracking Summary")
@@ -517,6 +575,24 @@ def report(tracker, week, format_type):
 
 @cli.command()
 @click.pass_obj
+def pause(tracker):
+    """Pause the current active timer."""
+    tracker.pause_timer()
+
+@cli.command()
+@click.pass_obj
+def resume(tracker):
+    """Resume the paused timer."""
+    tracker.resume_timer()
+
+@cli.command()
+@click.pass_obj
+def resume(tracker):
+    """Resume the paused timer."""
+    tracker.remove_timer()
+
+@cli.command()
+@click.pass_obj
 def status(tracker):
     """Show currently running timers."""
     if not tracker.active_timers:
@@ -526,24 +602,44 @@ def status(tracker):
     click.echo("\nActive Timers:")
     click.echo("-" * 70)
     for timer_key, timer_data in tracker.active_timers.items():
-        start = datetime.datetime.fromisoformat(str(timer_data['start_time']))
-        duration = datetime.datetime.now() - start
-        hours, remainder = divmod(duration.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
+        accumulated = timer_data.get('accumulated_seconds', 0.0)
         description = f" - {timer_data['description']}" if timer_data['description'] else ""
-        click.echo(f"{timer_key}{description:<30} Running for: {hours:02d}:{minutes:02d}:{seconds:02d}")
+
+        if timer_data.get('paused'):
+            total_seconds = accumulated
+            status = "Paused"
+        else:
+            start_time = datetime.datetime.fromisoformat(timer_data['start_time'])
+            now = datetime.datetime.now()
+            elapsed = (now - start_time).total_seconds()
+            total_seconds = accumulated + elapsed
+            status = "Running"
+
+        hours, remainder = divmod(int(total_seconds), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        click.echo(f"{timer_key}{description:<30} {status}: {hours:02d}:{minutes:02d}:{seconds:02d}")
 
 @cli.command()
-@click.argument('category')
+@click.argument('main_category', required=False)
 @click.pass_obj
-def list_subcategories(tracker, category):
-    """List available subcategories for a main category."""
-    subcategories = tracker.get_subcategories(category)
+def categories(tracker, main_category):
+    """List categories and subcategories.
+    
+    Without arguments: shows all main categories
+    With main_category: shows subcategories for that category
+    """
+    if main_category is None:
+        click.echo("\nAvailable categories:")
+        for category in tracker.categories.keys():
+            click.echo(f"- {category}")
+        return
+        
+    subcategories = tracker.get_subcategories(main_category)
     if not subcategories:
-        click.echo(f"No subcategories found for '{category}'")
+        click.echo(f"No subcategories found for '{main_category}'")
         return
     
-    click.echo(f"\nSubcategories for {category}:")
+    click.echo(f"\nSubcategories for {main_category}:")
     for sub in subcategories:
         click.echo(f"- {sub}")
 

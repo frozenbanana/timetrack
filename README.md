@@ -56,6 +56,14 @@ This will:
 
 `timetrack start --category "Development" --subcategory "Frontend"`
 
+**Pause current active session**
+
+`timetrack pause`
+
+**Resume current active session**
+
+`timetrack resume`
+
 **Add past session**
 
 `timetrack add`
