@@ -451,14 +451,14 @@ class TimeTracker:
 
         # Print totals
         total_hours = sum(category_totals.values())
-        for main_cat in Category._member_map_.values():
-            main_cat = main_cat.value
+        for main_cat in self.categories.keys():
             if main_cat in category_totals:
                 click.echo(f"\n{main_cat}:")
                 for sub_cat, hours in subcategory_totals[main_cat].items():
-                    click.echo(f"  {sub_cat}: ({hours:.2f})")
+                    click.echo(f" - {sub_cat}: ({hours:.2f})")
                 click.echo(f"Total: ({category_totals[main_cat]:.2f})")
 
+        click.echo("-" * 50)
         click.echo(f"\nTotal Hours: {total_hours:.2f}")
 
 @click.group()
