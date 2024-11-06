@@ -395,13 +395,38 @@ class TimeTracker:
 
         if format_type == "summary":
             self._generate_summary_report(filtered_sessions)
+        elif format_type == "cospend":
+            self._generate_cospend_report(filtered_sessions)
         else:
             self._generate_detailed_report(filtered_sessions)
 
+    def _generate_cospend_report(self, sessions):
+        click.echo("\nCospend Time Tracking Report")
+        click.echo("-" * 50)
+
+        # Group sessions by date
+        sessions_by_date = {}
+        for session in sessions:
+            start_date = datetime.datetime.fromisoformat(str(session['start_time'])).date()
+            if start_date not in sessions_by_date:
+                sessions_by_date[start_date] = []
+            sessions_by_date[start_date].append(session)
+
+        # Print sessions by date in the specified format
+        for date, day_sessions in sorted(sessions_by_date.items()):
+            click.echo(f"\nDate: {date.strftime('%Y-%m-%d')}")
+            for session in day_sessions:
+                main_category = session['main_category']
+                subcategory = session['subcategory']
+                description = session['description']
+                duration_hours = session['duration_hours']
+                click.echo(f"{main_category} - {subcategory}: {description} ({duration_hours:.2f})")
+        click.echo("-" * 50)
+        
     def _generate_detailed_report(self, sessions):
         click.echo("\nDetailed Time Tracking Report")
         click.echo("-" * 115)
-        click.echo(f"{'Category':<15} {'Subcategory':<22} {'Description':<30} {'Duration':<10} {'Date':<14} {'Week':<5}")
+        click.echo(f"{'ID':<5} {'Category':<15} {'Subcategory':<29} {'Description':<30} {'Duration':<10} {'Date':<14} {'Week':<5}")
         click.echo("-" * 115)
 
         total_hours = 0.0
@@ -418,9 +443,11 @@ class TimeTracker:
             if len(description) > 28:
                 description = description[:25] + '...'
 
+
             click.echo(
+                f"{session['id']:<5}"
                 f"{session['main_category']:<15} "
-                f"{subcategory:<22} "
+                f"{subcategory:<30} "
                 f"{description:<30} "
                 f"{f'{duration_hours:.2f}h':<10} "
                 f"{start.strftime('%Y-%m-%d'):<15}"
@@ -566,11 +593,21 @@ def end(tracker, main_category, subcategory):
 
 @cli.command()
 @click.option('--week', type=int, help='Filter report by week number')
-@click.option('--format', 'format_type', type=click.Choice(['detailed', 'summary']), 
+@click.option('--format', 'format_type', type=click.Choice(['detailed', 'summary', 'cospend']), 
               default='detailed', help='Report format type')
 @click.pass_obj
 def report(tracker, week, format_type):
     """Generate a report of time tracking sessions."""
+    tracker.generate_report(week, format_type)
+
+# Alias for 'report' as 'list'
+@cli.command(name="list")
+@click.option('--week', type=int, help='Filter report by week number')
+@click.option('--format', 'format_type', type=click.Choice(['detailed', 'summary', 'cospend']), 
+              default='detailed', help='Report format type')
+@click.pass_obj
+def list_alias(tracker, week, format_type):
+    """Alias for report command."""
     tracker.generate_report(week, format_type)
 
 @cli.command()
