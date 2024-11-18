@@ -59,7 +59,7 @@ class TimeTracker:
     def get_subcategories(self, main_category: str) -> List[str]:
         return self.categories.get(main_category, [])
 
-    def start_timer(self, main_category: str, subcategory: str, description: str = ""):
+    def start_timer(self, main_category: str, subcategory: str, description: str = "", offset_minutes: int = 0):
         if not subcategory in self.get_subcategories(main_category):
             valid_subcategories = "\n".join(f"- {sub}" for sub in self.get_subcategories(main_category))
             raise click.ClickException(
@@ -83,10 +83,13 @@ class TimeTracker:
             else:
                 raise click.ClickException("Please stop the current timer before starting a new one.")
 
+         # Calculate start time with offset
+        
+        start_time = datetime.datetime.now() - datetime.timedelta(minutes=offset_minutes)
 
         timer_key = f"{main_category} - {subcategory}"
         self.active_timers[timer_key] = {
-            'start_time': datetime.datetime.now().isoformat(),
+            'start_time': start_time.isoformat(),
             'main_category': main_category,
             'subcategory': subcategory,
             'description': description,
@@ -95,7 +98,7 @@ class TimeTracker:
             'pause_time': None
         }
         self._save_data()
-        click.echo(f"Started timer for '{timer_key}' - {description}")
+        click.echo(f"Started timer for '{timer_key}' - {description} (offset: {offset_minutes} minutes)")
 
     def pause_timer(self):
         if not self.active_timers:
@@ -118,8 +121,6 @@ class TimeTracker:
 
         self._save_data()
         click.echo(f"Paused timer '{timer_key}'")
-
-    #def remove_timer(self): 
     
     def resume_timer(self):
         if not self.active_timers:
@@ -193,10 +194,10 @@ class TimeTracker:
         
         return main_category, subcategory, description
 
-    def start_timer_wizard(self):
+    def start_timer_wizard(self, offset_minutes: int = 0):
         """Start a timer using an interactive wizard."""
         main_category, subcategory, description = self.prompt_category_selection()
-        self.start_timer(main_category, subcategory, description)
+        self.start_timer(main_category, subcategory, description, offset_minutes)
 
     def end_timer(self, main_category: Optional[str] = None, subcategory: Optional[str] = None):
         if not self.active_timers:
@@ -499,8 +500,9 @@ def cli(ctx):
 @click.argument('main_category', required=False)
 @click.argument('subcategory', required=False)
 @click.option('--description', '-d', default="", help='Optional description of the task')
+@click.option('--offset', '-o', default="0", help='Optional offset in minutes')
 @click.pass_obj
-def start(tracker, main_category, subcategory, description):
+def start(tracker, main_category, subcategory, description, offset):
     """
     Start a timer. If no category/subcategory provided, launches interactive wizard.
     
@@ -509,9 +511,9 @@ def start(tracker, main_category, subcategory, description):
         timetrack start "Product dev" "Software development" -d "Working on paywall"
     """
     if main_category is None or subcategory is None:
-        tracker.start_timer_wizard()
+        tracker.start_timer_wizard( int(offset) )
     else:
-        tracker.start_timer(main_category, subcategory, description)
+        tracker.start_timer(main_category, subcategory, description, int(offset))
 
 @cli.command()
 @click.option('--date', type=str, help='Date in YYYY-MM-DD format')
